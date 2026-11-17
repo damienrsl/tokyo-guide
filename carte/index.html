@@ -97,6 +97,21 @@ button.tk-btn{border:0;cursor:pointer;font:inherit;font-weight:700;font-size:14p
  #tk-themes .tk-chip{flex:none}
  .tk-recherche{flex-basis:100%}
 }
+/* boutons carte : plein écran, me situer */
+.tk-ctl{display:flex;flex-direction:column;align-items:flex-end;gap:8px}
+.tk-ctl button{appearance:none;display:inline-flex;align-items:center;justify-content:center;gap:6px;min-width:46px;height:46px;padding:0 13px;border:0;border-radius:14px;background:#fff;color:#0b0f24;font:700 14px/1 var(--police,system-ui,-apple-system,sans-serif);box-shadow:0 4px 14px rgba(10,20,60,.28);cursor:pointer}
+.tk-ctl button svg{width:20px;height:20px;flex:none}
+.tk-ctl button.on{background:var(--tk-bleu,#285FFF);color:#fff}
+.tk-moi{width:20px;height:20px;border-radius:50%;background:#1a73e8;border:3px solid #fff;box-shadow:0 0 0 6px rgba(26,115,232,.25),0 2px 6px rgba(0,0,0,.35)}
+/* plein écran : la carte prend tout l'écran du téléphone */
+html.tk-sans-defil,html.tk-sans-defil body{overflow:hidden;overscroll-behavior:none}
+.tk-cadre.tk-plein{position:fixed;inset:0;z-index:2147483000;border-radius:0;border:0;box-shadow:none;margin:0}
+.tk-cadre.tk-plein .tk-map{height:100%;min-height:0}
+.tk-plein .leaflet-top{top:env(safe-area-inset-top,0px)}
+.tk-plein .leaflet-bottom{bottom:env(safe-area-inset-bottom,0px)}
+.tk-plein .tk-aide{bottom:calc(12px + env(safe-area-inset-bottom,0px))}
+@media(max-width:700px){.tk-plein .tk-fiche{max-height:50%;bottom:calc(8px + env(safe-area-inset-bottom,0px))}}
+.tk-carte .maplibregl-canvas,.tk-carte .leaflet-gl-layer{outline:none}
 @media(prefers-reduced-motion:reduce){.tk-pinw,.tk-pinw.pop,.tk-bulle,.tk-bulle.pop,.tk-pinw.on .tk-pin{animation:none!important}.tk-fiche{transition:none}}
 </style>
 <div class="tk-carte" id="tk-carte">
@@ -127,8 +142,20 @@ var TH={};THEMES.forEach(function(t){TH[t[0]]={e:t[1],n:t[2],c:t[3]}});
 var ZOOM_PINS=14;
 var root=document.getElementById('tk-carte');
 var VUE=[[35.615,139.64],[35.75,139.805]];
-var map=L.map('tk-map',{center:[35.675,139.72],zoom:11,minZoom:10,maxZoom:18,zoomControl:true,scrollWheelZoom:false,dragging:!L.Browser.mobile,tap:false,maxBounds:[[35.4,139.4],[35.95,140.05]],maxBoundsViscosity:.8});
-L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>'}).addTo(map);
+var map=L.map('tk-map',{center:[35.675,139.72],zoom:11,minZoom:10,maxZoom:19,zoomControl:true,scrollWheelZoom:false,dragging:!L.Browser.mobile,tap:false,maxBounds:[[35.4,139.4],[35.95,140.05]],maxBoundsViscosity:.8});
+var osm=L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>'}).addTo(map);
+/* fond HD : carte vectorielle (nette sur écran Retina, noms en latin + japonais), chargée après la page ; OSM reste en secours */
+var VENDOR='vendor';
+function chargerJs(src,cb){var s=document.createElement('script');s.src=src;s.onload=cb;document.head.appendChild(s)}
+function fondHD(){
+ try{var c=document.createElement('canvas');if(!(c.getContext('webgl2')||c.getContext('webgl')))return}catch(e){return}
+ var l=document.createElement('link');l.rel='stylesheet';l.href=VENDOR+'/maplibre-gl.css';document.head.appendChild(l);
+ chargerJs(VENDOR+'/maplibre-gl.js',function(){chargerJs(VENDOR+'/leaflet-maplibre-gl.js',function(){try{
+  var v=L.maplibreGL({style:'https://tiles.openfreemap.org/styles/liberty',attribution:'<a href="https://openfreemap.org" target="_blank" rel="noopener">OpenFreeMap</a> © <a href="https://www.openmaptiles.org/" target="_blank" rel="noopener">OpenMapTiles</a> © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>'}).addTo(map);
+  v.getMaplibreMap().once('idle',function(){map.removeLayer(osm);root.setAttribute('data-fond','hd')});
+ }catch(e){}})});
+}
+if(document.readyState==='complete')setTimeout(fondHD,0);else window.addEventListener('load',fondHD);
 map.fitBounds(VUE,{padding:[10,10]});
 var layer=L.layerGroup().addTo(map);
 var actifs={};THEMES.forEach(function(t){actifs[t[0]]=true});
@@ -281,7 +308,39 @@ rendre(true);
 var H1=lireHash();if(H1.lieu){var p0=byId(H1.lieu);if(p0){map.setView([p0.lat,p0.lon],16);ouvrir(p0,false)}}
 /* ajustement à l'affichage dans une page qui scrolle */
 setTimeout(function(){map.invalidateSize()},300);window.addEventListener('load',function(){map.invalidateSize()});
-window.tokyoCarte={map:map,ouvrir:function(id){var p=byId(id);if(p)ouvrir(p,true)},lieux:LIEUX,maison:function(){return maison},setMaison:setMaison};
+/* boutons : plein écran + me situer */
+var cadre=root.querySelector('.tk-cadre'),repere=document.createComment('tk-cadre'),plein=false;
+var IC_PLEIN='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>';
+var IC_SORTIR='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>';
+var IC_MOI='<svg viewBox="0 0 24 24" fill="currentColor"><path d="M21 3L3 10.5l7.2 2.3L12.5 20z"/></svg>';
+var Ctl=L.Control.extend({options:{position:'topright'},onAdd:function(){var d=L.DomUtil.create('div','tk-ctl');d.innerHTML='<button type="button" id="tk-plein-btn"></button><button type="button" id="tk-moi-btn" aria-label="Me situer sur la carte" title="Me situer">'+IC_MOI+'</button>';L.DomEvent.disableClickPropagation(d);L.DomEvent.disableScrollPropagation(d);return d}});
+map.addControl(new Ctl());
+var pBtn=document.getElementById('tk-plein-btn'),moiBtn=document.getElementById('tk-moi-btn');
+function majPlein(){pBtn.innerHTML=plein?IC_SORTIR+'Fermer':IC_PLEIN+'Plein écran';pBtn.setAttribute('aria-label',plein?'Quitter le plein écran':'Afficher la carte en plein écran');pBtn.classList.toggle('on',plein)}
+function setPlein(on){
+ if(on===plein)return;plein=on;var c=map.getCenter(),z=map.getZoom();
+ if(on){cadre.parentNode.insertBefore(repere,cadre);document.body.appendChild(cadre);cadre.classList.add('tk-carte','tk-plein');document.documentElement.classList.add('tk-sans-defil');map.dragging.enable();map.scrollWheelZoom.enable()}
+ else{cadre.classList.remove('tk-carte','tk-plein');if(repere.parentNode){repere.parentNode.insertBefore(cadre,repere);repere.parentNode.removeChild(repere)}document.documentElement.classList.remove('tk-sans-defil');if(L.Browser.mobile)map.dragging.disable();map.scrollWheelZoom.disable()}
+ majPlein();map.invalidateSize();map.setView(c,z,{animate:false});setTimeout(function(){map.invalidateSize()},80);
+}
+pBtn.onclick=function(){setPlein(!plein)};majPlein();
+document.addEventListener('keydown',function(e){if(e.key==='Escape'&&plein&&!sel&&!panneau)setPlein(false)});
+var AIDE0=document.getElementById('tk-aide').textContent,aideT=null;
+function dire(t){var a=document.getElementById('tk-aide');a.textContent=t;a.style.opacity=1;clearTimeout(aideT);aideT=setTimeout(function(){a.style.opacity=0;setTimeout(function(){a.textContent=AIDE0},450)},5000)}
+var moiM=null,moiC=null,suivi=false,centrer=false;
+moiBtn.onclick=function(){
+ if(!navigator.geolocation){dire('Localisation indisponible sur ce navigateur');return}
+ if(moiM){map.flyTo(moiM.getLatLng(),Math.max(map.getZoom(),16),{duration:.6});return}
+ centrer=true;dire('Recherche de votre position…');
+ if(!suivi){suivi=true;moiBtn.classList.add('on');map.locate({watch:true,enableHighAccuracy:true,setView:false})}
+};
+map.on('locationfound',function(e){
+ if(!moiM){moiC=L.circle(e.latlng,{radius:e.accuracy,color:'#1a73e8',weight:1,fillOpacity:.12,interactive:false}).addTo(map);moiM=L.marker(e.latlng,{icon:L.divIcon({className:'',iconSize:[20,20],iconAnchor:[10,10],html:'<div class="tk-moi"></div>'}),interactive:false,keyboard:false,zIndexOffset:6000}).addTo(map)}
+ else{moiM.setLatLng(e.latlng);moiC.setLatLng(e.latlng).setRadius(e.accuracy)}
+ if(centrer){centrer=false;if(map.options.maxBounds&&!L.latLngBounds(map.options.maxBounds).contains(e.latlng))dire('Vous êtes hors de la zone de la carte');else{map.flyTo(e.latlng,Math.max(map.getZoom(),16),{duration:.8});dire('Le point bleu, c’est vous')}}
+});
+map.on('locationerror',function(e){suivi=false;centrer=false;moiBtn.classList.remove('on');map.stopLocate();dire(e.code===1?'Localisation refusée : Réglages › Confidentialité › Service de localisation › Safari':'Position introuvable pour l’instant, réessayez')});
+window.tokyoCarte={map:map,plein:setPlein,ouvrir:function(id){var p=byId(id);if(p)ouvrir(p,true)},lieux:LIEUX,maison:function(){return maison},setMaison:setMaison};
 })();
 </script>
 </body></html>
